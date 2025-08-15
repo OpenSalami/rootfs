@@ -11,137 +11,76 @@
 
 # Functions
 
-########################
-# Ensure a file/directory is owned (user and group) but the given user
-# Arguments:
-#   $1 - filepath
-#   $2 - owner
-# Returns:
-#   None
-#########################
 owned_by() {
     local path="${1:?path is missing}"
     local owner="${2:?owner is missing}"
     local group="${3:-}"
 
-    if [[ -n $group ]]; then
+    if [ -n "$group" ]; then
         chown "$owner":"$group" "$path"
     else
         chown "$owner":"$owner" "$path"
     fi
 }
 
-########################
-# Ensure a directory exists and, optionally, is owned by the given user
-# Arguments:
-#   $1 - directory
-#   $2 - owner
-# Returns:
-#   None
-#########################
 ensure_dir_exists() {
     local dir="${1:?directory is missing}"
     local owner_user="${2:-}"
     local owner_group="${3:-}"
 
     [ -d "${dir}" ] || mkdir -p "${dir}"
-    if [[ -n $owner_user ]]; then
+    if [ -n "$owner_user" ]; then
         owned_by "$dir" "$owner_user" "$owner_group"
     fi
 }
 
-########################
-# Checks whether a directory is empty or not
-# arguments:
-#   $1 - directory
-# returns:
-#   boolean
-#########################
 is_dir_empty() {
-    local -r path="${1:?missing directory}"
+    local path="${1:?missing directory}"
     # Calculate real path in order to avoid issues with symlinks
-    local -r dir="$(realpath "$path")"
-    if [[ ! -e "$dir" ]] || [[ -z "$(ls -A "$dir")" ]]; then
-        true
+    local dir
+    dir="$(realpath "$path")"
+    if [ ! -e "$dir" ] || [ -z "$(ls -A "$dir")" ]; then
+        return 0
     else
-        false
+        return 1
     fi
 }
 
-########################
-# Checks whether a mounted directory is empty or not
-# arguments:
-#   $1 - directory
-# returns:
-#   boolean
-#########################
 is_mounted_dir_empty() {
     local dir="${1:?missing directory}"
 
     if is_dir_empty "$dir" || find "$dir" -mindepth 1 -maxdepth 1 -not -name ".snapshot" -not -name "lost+found" -exec false {} +; then
-        true
+        return 0
     else
-        false
+        return 1
     fi
 }
 
-########################
-# Checks whether a file can be written to or not
-# arguments:
-#   $1 - file
-# returns:
-#   boolean
-#########################
 is_file_writable() {
     local file="${1:?missing file}"
     local dir
     dir="$(dirname "$file")"
 
-    if [[ (-f "$file" && -w "$file") || (! -f "$file" && -d "$dir" && -w "$dir") ]]; then
-        true
+    if { [ -f "$file" ] && [ -w "$file" ]; } || { [ ! -f "$file" ] && [ -d "$dir" ] && [ -w "$dir" ]; }; then
+        return 0
     else
-        false
+        return 1
     fi
 }
 
-########################
-# Relativize a path
-# arguments:
-#   $1 - path
-#   $2 - base
-# returns:
-#   None
-#########################
 relativize() {
-    local -r path="${1:?missing path}"
-    local -r base="${2:?missing base}"
-    pushd "$base" >/dev/null || exit
-    realpath -q --no-symlinks --relative-base="$base" "$path" | sed -e 's|^/$|.|' -e 's|^/||'
-    popd >/dev/null || exit
+    local path="${1:?missing path}"
+    local base="${2:?missing base}"
+    (cd "$base" >/dev/null 2>&1 && realpath -q --no-symlinks --relative-base="$base" "$path" | sed -e 's|^/$|.|' -e 's|^/||')
 }
 
-########################
-# Configure permissions and ownership recursively
-# Globals:
-#   None
-# Arguments:
-#   $1 - paths (as a string).
-# Flags:
-#   -f|--file-mode - mode for directories.
-#   -d|--dir-mode - mode for files.
-#   -u|--user - user
-#   -g|--group - group
-# Returns:
-#   None
-#########################
 configure_permissions_ownership() {
-    local -r paths="${1:?paths is missing}"
+    local paths="${1:?paths is missing}"
     local dir_mode=""
     local file_mode=""
     local user=""
     local group=""
 
-    # Validate arguments
     shift 1
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -169,21 +108,22 @@ configure_permissions_ownership() {
         shift
     done
 
-    read -r -a filepaths <<<"$paths"
-    for p in "${filepaths[@]}"; do
-        if [[ -e "$p" ]]; then
-            find -L "$p" -printf ""
-            if [[ -n $dir_mode ]]; then
+    # Split paths string into positional parameters
+    set -- $paths
+    for p in "$@"; do
+        if [ -e "$p" ]; then
+            # find -L "$p" -printf "" # Not POSIX, so skip or replace as needed
+            if [ -n "$dir_mode" ]; then
                 find -L "$p" -type d ! -perm "$dir_mode" -print0 | xargs -r -0 chmod "$dir_mode"
             fi
-            if [[ -n $file_mode ]]; then
+            if [ -n "$file_mode" ]; then
                 find -L "$p" -type f ! -perm "$file_mode" -print0 | xargs -r -0 chmod "$file_mode"
             fi
-            if [[ -n $user ]] && [[ -n $group ]]; then
+            if [ -n "$user" ] && [ -n "$group" ]; then
                 find -L "$p" -print0 | xargs -r -0 chown "${user}:${group}"
-            elif [[ -n $user ]] && [[ -z $group ]]; then
+            elif [ -n "$user" ] && [ -z "$group" ]; then
                 find -L "$p" -print0 | xargs -r -0 chown "${user}"
-            elif [[ -z $user ]] && [[ -n $group ]]; then
+            elif [ -z "$user" ] && [ -n "$group" ]; then
                 find -L "$p" -print0 | xargs -r -0 chgrp "${group}"
             fi
         else

@@ -14,133 +14,72 @@ CYAN='\033[38;5;6m'
 
 # Functions
 
-########################
-# Print to STDERR
-# Arguments:
-#   Message to print
-# Returns:
-#   None
-#########################
 stderr_print() {
     # 'is_boolean_yes' is defined in libvalidations.sh, but depends on this file so we cannot source it
-    local bool="${SALAMI_QUIET:-false}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if ! [[ "$bool" = 1 || "$bool" =~ ^(yes|true)$ ]]; then
-        printf "%b\\n" "${*}" >&2
+    bool="${SALAMI_QUIET:-false}"
+    case "$bool" in
+        1|[Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]) return 0 ;;
+        *) printf "%b\n" "$*" >&2 ;;
+    esac
+}
+
+log() {
+    color_bool="${SALAMI_COLOR:-true}"
+    if echo "$color_bool" | grep -iqE '^(1|yes|true)$'; then
+        stderr_print "${CYAN}${MODULE:-} ${MAGENTA}$(date "+%T.%2N ")${RESET}$*"
+    else
+        stderr_print "${MODULE:-} $(date "+%T.%2N ")$*"
     fi
 }
 
-########################
-# Log message
-# Arguments:
-#   Message to log
-# Returns:
-#   None
-#########################
-log() {
-    local color_bool="${SALAMI_COLOR:-true}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]]; then
-        stderr_print "${CYAN}${MODULE:-} ${MAGENTA}$(date "+%T.%2N ")${RESET}${*}"
-    else
-        stderr_print "${MODULE:-} $(date "+%T.%2N ")${*}"
-    fi
-}
-########################
-# Log an 'info' message
-# Arguments:
-#   Message to log
-# Returns:
-#   None
-#########################
 info() {
-    local msg_color=""
-    local color_bool="${SALAMI_COLOR:-true}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]];then
+    msg_color=""
+    color_bool="${SALAMI_COLOR:-true}"
+    if echo "$color_bool" | grep -iqE '^(1|yes|true)$'; then
         msg_color="$GREEN"
     fi
-    log "${msg_color}INFO ${RESET} ==> ${*}"
+    log "${msg_color}INFO ${RESET} ==> $*"
 }
-########################
-# Log message
-# Arguments:
-#   Message to log
-# Returns:
-#   None
-#########################
+
 warn() {
-    local msg_color=""
-    local color_bool="${SALAMI_COLOR:-true}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]];then
+    msg_color=""
+    color_bool="${SALAMI_COLOR:-true}"
+    if echo "$color_bool" | grep -iqE '^(1|yes|true)$'; then
         msg_color="$YELLOW"
     fi
-    log "${msg_color}WARN ${RESET} ==> ${*}"
+    log "${msg_color}WARN ${RESET} ==> $*"
 }
-########################
-# Log an 'error' message
-# Arguments:
-#   Message to log
-# Returns:
-#   None
-#########################
+
 error() {
-    local msg_color=""
-    local color_bool="${BITNAMI_COLOR:-true}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]];then
+    msg_color=""
+    color_bool="${BITNAMI_COLOR:-true}"
+    if echo "$color_bool" | grep -iqE '^(1|yes|true)$'; then
         msg_color="$RED"
     fi
-    log "${msg_color}ERROR${RESET} ==> ${*}"
+    log "${msg_color}ERROR${RESET} ==> $*"
 }
-########################
-# Log a 'debug' message
-# Globals:
-#   BITNAMI_DEBUG
-# Arguments:
-#   None
-# Returns:
-#   None
-#########################
+
 debug() {
-    local msg_color=""
-    local color_bool="${SALAMI_COLOR:-true}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]] ;then
+    msg_color=""
+    color_bool="${SALAMI_COLOR:-true}"
+    if echo "$color_bool" | grep -iqE '^(1|yes|true)$'; then
         msg_color="$MAGENTA"
     fi
-    local debug_bool="${BITNAMI_DEBUG:-false}"
-    if [[ "$debug_bool" = 1 || "$debug_bool" =~ ^(yes|true)$ ]]; then
-        log "${msg_color}DEBUG${RESET} ==> ${*}"
+    debug_bool="${BITNAMI_DEBUG:-false}"
+    if echo "$debug_bool" | grep -iqE '^(1|yes|true)$'; then
+        log "${msg_color}DEBUG${RESET} ==> $*"
     fi
 }
 
-########################
-# Indent a string
-# Arguments:
-#   $1 - string
-#   $2 - number of indentation characters (default: 4)
-#   $3 - indentation character (default: " ")
-# Returns:
-#   None
-#########################
 indent() {
-    local string="${1:-}"
-    local num="${2:?missing num}"
-    local char="${3:-" "}"
-    # Build the indentation unit string
-    local indent_unit=""
-    for ((i = 0; i < num; i++)); do
+    string="${1:-}"
+    num="${2:?missing num}"
+    char="${3:-" "}"
+    indent_unit=""
+    i=0
+    while [ "$i" -lt "$num" ]; do
         indent_unit="${indent_unit}${char}"
+        i=$((i+1))
     done
-    # shellcheck disable=SC2001
-    # Complex regex, see https://github.com/koalaman/shellcheck/wiki/SC2001#exceptions
     echo "$string" | sed "s/^/${indent_unit}/"
 }

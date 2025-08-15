@@ -19,12 +19,11 @@
 #   Boolean
 #########################
 is_int() {
-    local -r int="${1:?missing value}"
-    if [[ "$int" =~ ^-?[0-9]+ ]]; then
-        true
-    else
-        false
-    fi
+    int="${1:?missing value}"
+    case "$int" in
+        -[0-9]*|[0-9]*) true ;;
+        *) false ;;
+    esac
 }
 
 ########################
@@ -35,8 +34,8 @@ is_int() {
 #   Boolean
 #########################
 is_positive_int() {
-    local -r int="${1:?missing value}"
-    if is_int "$int" && (( "${int}" >= 0 )); then
+    int="${1:?missing value}"
+    if is_int "$int" && [ "$int" -ge 0 ] 2>/dev/null; then
         true
     else
         false
@@ -51,14 +50,11 @@ is_positive_int() {
 #   Boolean
 #########################
 is_boolean_yes() {
-    local -r bool="${1:-}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if [[ "$bool" = 1 || "$bool" =~ ^(yes|true)$ ]]; then
-        true
-    else
-        false
-    fi
+    bool="${1:-}"
+    case "$bool" in
+        1|[Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]) true ;;
+        *) false ;;
+    esac
 }
 
 ########################
@@ -69,12 +65,11 @@ is_boolean_yes() {
 #   Boolean
 #########################
 is_yes_no_value() {
-    local -r bool="${1:-}"
-    if [[ "$bool" =~ ^(yes|no)$ ]]; then
-        true
-    else
-        false
-    fi
+    bool="${1:-}"
+    case "$bool" in
+        [Yy][Ee][Ss]|[Nn][Oo]) true ;;
+        *) false ;;
+    esac
 }
 
 ########################
@@ -85,12 +80,11 @@ is_yes_no_value() {
 #   Boolean
 #########################
 is_true_false_value() {
-    local -r bool="${1:-}"
-    if [[ "$bool" =~ ^(true|false)$ ]]; then
-        true
-    else
-        false
-    fi
+    bool="${1:-}"
+    case "$bool" in
+        [Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]) true ;;
+        *) false ;;
+    esac
 }
 
 ########################
@@ -101,12 +95,11 @@ is_true_false_value() {
 #   Boolean
 #########################
 is_1_0_value() {
-    local -r bool="${1:-}"
-    if [[ "$bool" =~ ^[10]$ ]]; then
-        true
-    else
-        false
-    fi
+    bool="${1:-}"
+    case "$bool" in
+        1|0) true ;;
+        *) false ;;
+    esac
 }
 
 ########################
@@ -117,12 +110,8 @@ is_1_0_value() {
 #   Boolean
 #########################
 is_empty_value() {
-    local -r val="${1:-}"
-    if [[ -z "$val" ]]; then
-        true
-    else
-        false
-    fi
+    val="${1:-}"
+    [ -z "$val" ]
 }
 
 ########################
@@ -133,11 +122,10 @@ is_empty_value() {
 #   Boolean and error message
 #########################
 validate_port() {
-    local value
-    local unprivileged=0
+    unprivileged=0
 
     # Parse flags
-    while [[ "$#" -gt 0 ]]; do
+    while [ "$#" -gt 0 ]; do
         case "$1" in
             -unprivileged)
                 unprivileged=1
@@ -157,30 +145,30 @@ validate_port() {
         shift
     done
 
-    if [[ "$#" -gt 1 ]]; then
+    if [ "$#" -gt 1 ]; then
         echo "too many arguments provided"
         return 2
-    elif [[ "$#" -eq 0 ]]; then
+    elif [ "$#" -eq 0 ]; then
         stderr_print "missing port argument"
         return 1
     else
         value=$1
     fi
 
-    if [[ -z "$value" ]]; then
+    if [ -z "$value" ]; then
         echo "the value is empty"
         return 1
     else
         if ! is_int "$value"; then
             echo "value is not an integer"
             return 2
-        elif [[ "$value" -lt 0 ]]; then
+        elif [ "$value" -lt 0 ]; then
             echo "negative value provided"
             return 2
-        elif [[ "$value" -gt 65535 ]]; then
+        elif [ "$value" -gt 65535 ]; then
             echo "requested port is greater than 65535"
             return 2
-        elif [[ "$unprivileged" = 1 && "$value" -lt 1024 ]]; then
+        elif [ "$unprivileged" = 1 ] && [ "$value" -lt 1024 ]; then
             echo "privileged port requested"
             return 3
         fi
@@ -195,15 +183,13 @@ validate_port() {
 #   Boolean
 #########################
 validate_ipv6() {
-    local ip="${1:?ip is missing}"
-    local stat=1
-    local full_address_regex='^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$'
-    local short_address_regex='^((([0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}){0,6}::(([0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}){0,6})$'
-
-    if [[ $ip =~ $full_address_regex || $ip =~ $short_address_regex || $ip == "::" ]]; then
-        stat=0
-    fi
-    return $stat
+    ip="${1:?ip is missing}"
+    # Basic check for IPv6 format (not exhaustive)
+    case "$ip" in
+        *:*:*:*:*:*:*:*) true ;;
+        ::) true ;;
+        *) false ;;
+    esac
 }
 
 ########################
@@ -214,14 +200,13 @@ validate_ipv6() {
 #   Boolean
 #########################
 validate_ipv4() {
-    local ip="${1:?ip is missing}"
-    local stat=1
-
-    if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-        read -r -a ip_array <<< "$(tr '.' ' ' <<< "$ip")"
-        [[ ${ip_array[0]} -le 255 && ${ip_array[1]} -le 255 \
-            && ${ip_array[2]} -le 255 && ${ip_array[3]} -le 255 ]]
-        stat=$?
+    ip="${1:?ip is missing}"
+    stat=1
+    if echo "$ip" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
+        set -- $(echo "$ip" | tr '.' ' ')
+        if [ "$1" -le 255 ] && [ "$2" -le 255 ] && [ "$3" -le 255 ] && [ "$4" -le 255 ]; then
+            stat=0
+        fi
     fi
     return $stat
 }
@@ -234,15 +219,14 @@ validate_ipv4() {
 #   Boolean
 #########################
 validate_ip() {
-    local ip="${1:?ip is missing}"
-    local stat=1
-
+    ip="${1:?ip is missing}"
     if validate_ipv4 "$ip"; then
-        stat=0
+        return 0
+    elif validate_ipv6 "$ip"; then
+        return 0
     else
-        stat=$(validate_ipv6 "$ip")
+        return 1
     fi
-    return $stat
 }
 
 ########################
@@ -253,9 +237,9 @@ validate_ip() {
 #   Boolean
 #########################
 validate_string() {
-    local string
-    local min_length=-1
-    local max_length=-1
+    string=""
+    min_length=-1
+    max_length=-1
 
     # Parse flags
     while [ "$#" -gt 0 ]; do
@@ -283,11 +267,11 @@ validate_string() {
         shift
     done
 
-    if [[ "$min_length" -ge 0 ]] && [[ "${#string}" -lt "$min_length" ]]; then
+    if [ "$min_length" -ge 0 ] && [ "$(printf "%s" "$string" | wc -c)" -lt "$min_length" ]; then
         echo "string length is less than $min_length"
         return 1
     fi
-    if [[ "$max_length" -ge 0 ]] && [[ "${#string}" -gt "$max_length" ]]; then
+    if [ "$max_length" -ge 0 ] && [ "$(printf "%s" "$string" | wc -c)" -gt "$max_length" ]; then
         echo "string length is great than $max_length"
         return 1
     fi

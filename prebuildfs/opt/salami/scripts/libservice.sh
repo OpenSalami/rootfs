@@ -7,7 +7,7 @@
 # shellcheck disable=SC1091
 
 # Load Generic Libraries
-. /opt/salxami/scripts/libvalidations.sh
+. /opt/salami/scripts/libvalidations.sh
 . /opt/salami/scripts/liblog.sh
 
 # Functions
@@ -20,11 +20,12 @@
 #   PID
 #########################
 get_pid_from_file() {
-    local pid_file="${1:?pid file is missing}"
+    pid_file="${1:?pid file is missing}"
 
-    if [[ -f "$pid_file" ]]; then
-        if [[ -n "$(< "$pid_file")" ]] && [[ "$(< "$pid_file")" -gt 0 ]]; then
-            echo "$(< "$pid_file")"
+    if [ -f "$pid_file" ]; then
+        pid="$(cat "$pid_file")"
+        if [ -n "$pid" ] && [ "$pid" -gt 0 ] 2>/dev/null; then
+            echo "$pid"
         fi
     fi
 }
@@ -37,8 +38,7 @@ get_pid_from_file() {
 #   Boolean
 #########################
 is_service_running() {
-    local pid="${1:?pid is missing}"
-
+    pid="${1:?pid is missing}"
     kill -0 "$pid" 2>/dev/null
 }
 
@@ -51,21 +51,21 @@ is_service_running() {
 #   None
 #########################
 stop_service_using_pid() {
-    local pid_file="${1:?pid file is missing}"
-    local signal="${2:-}"
-    local pid
-
+    pid_file="${1:?pid file is missing}"
+    signal="${2:-}"
     pid="$(get_pid_from_file "$pid_file")"
-    [[ -z "$pid" ]] || ! is_service_running "$pid" && return
+    if [ -z "$pid" ] || ! is_service_running "$pid"; then
+        return
+    fi
 
-    if [[ -n "$signal" ]]; then
+    if [ -n "$signal" ]; then
         kill "-${signal}" "$pid"
     else
         kill "$pid"
     fi
 
-    local counter=10
-    while [[ "$counter" -ne 0 ]] && is_service_running "$pid"; do
+    counter=10
+    while [ "$counter" -ne 0 ] && is_service_running "$pid"; do
         sleep 1
         counter=$((counter - 1))
     done
@@ -79,9 +79,9 @@ stop_service_using_pid() {
 #   true if started correctly, false otherwise
 #########################
 cron_start() {
-    if [[ -x "/usr/sbin/cron" ]]; then
+    if [ -x "/usr/sbin/cron" ]; then
         /usr/sbin/cron
-    elif [[ -x "/usr/sbin/crond" ]]; then
+    elif [ -x "/usr/sbin/crond" ]; then
         /usr/sbin/crond
     else
         false
@@ -100,15 +100,15 @@ cron_start() {
 #   None
 #########################
 generate_cron_conf() {
-    local service_name="${1:?service name is missing}"
-    local cmd="${2:?command is missing}"
-    local run_as="root"
-    local schedule="* * * * *"
-    local clean="true"
+    service_name="${1:?service name is missing}"
+    cmd="${2:?command is missing}"
+    run_as="root"
+    schedule="* * * * *"
+    clean="true"
 
     # Parse optional CLI flags
     shift 2
-    while [[ "$#" -gt 0 ]]; do
+    while [ "$#" -gt 0 ]; do
         case "$1" in
             --run-as)
                 shift
@@ -130,7 +130,7 @@ generate_cron_conf() {
     done
 
     mkdir -p /etc/cron.d
-    if "$clean"; then
+    if [ "$clean" = "true" ]; then
         cat > "/etc/cron.d/${service_name}" <<EOF
 # Copyright Broadcom, Inc. All Rights Reserved.
 # SPDX-License-Identifier: APACHE-2.0
@@ -150,8 +150,8 @@ EOF
 #   None
 #########################
 remove_cron_conf() {
-    local service_name="${1:?service name is missing}"
-    local cron_conf_dir="/etc/monit/conf.d"
+    service_name="${1:?service name is missing}"
+    cron_conf_dir="/etc/monit/conf.d"
     rm -f "${cron_conf_dir}/${service_name}"
 }
 
@@ -168,16 +168,17 @@ remove_cron_conf() {
 #   None
 #########################
 generate_monit_conf() {
-    local service_name="${1:?service name is missing}"
-    local pid_file="${2:?pid file is missing}"
-    local start_command="${3:?start command is missing}"
-    local stop_command="${4:?stop command is missing}"
-    local monit_conf_dir="/etc/monit/conf.d"
-    local disabled="no"
+    service_name="${1:?service name is missing}"
+    pid_file="${2:?pid file is missing}"
+    start_command="${3:?start command is missing}"
+    stop_command="${4:?stop command is missing}"
+    monit_conf_dir="/etc/monit/conf.d"
+    disabled="no"
+    conf_suffix=""
 
     # Parse optional CLI flags
     shift 4
-    while [[ "$#" -gt 0 ]]; do
+    while [ "$#" -gt 0 ]; do
         case "$1" in
             --disable)
                 disabled="yes"
@@ -192,7 +193,7 @@ generate_monit_conf() {
 
     is_boolean_yes "$disabled" && conf_suffix=".disabled"
     mkdir -p "$monit_conf_dir"
-    cat > "${monit_conf_dir}/${service_name}.conf${conf_suffix:-}" <<EOF
+    cat > "${monit_conf_dir}/${service_name}.conf${conf_suffix}" <<EOF
 # Copyright Broadcom, Inc. All Rights Reserved.
 # SPDX-License-Identifier: APACHE-2.0
 
@@ -211,8 +212,8 @@ EOF
 #   None
 #########################
 remove_monit_conf() {
-    local service_name="${1:?service name is missing}"
-    local monit_conf_dir="/etc/monit/conf.d"
+    service_name="${1:?service name is missing}"
+    monit_conf_dir="/etc/monit/conf.d"
     rm -f "${monit_conf_dir}/${service_name}.conf"
 }
 
@@ -229,21 +230,27 @@ remove_monit_conf() {
 #   None
 #########################
 generate_logrotate_conf() {
-    local service_name="${1:?service name is missing}"
-    local log_path="${2:?log path is missing}"
-    local period="weekly"
-    local rotations="150"
-    local extra=""
-    local logrotate_conf_dir="/etc/logrotate.d"
-    local var_name
+    service_name="${1:?service name is missing}"
+    log_path="${2:?log path is missing}"
+    period="weekly"
+    rotations="150"
+    extra=""
+    logrotate_conf_dir="/etc/logrotate.d"
     # Parse optional CLI flags
     shift 2
-    while [[ "$#" -gt 0 ]]; do
+    while [ "$#" -gt 0 ]; do
         case "$1" in
-            --period|--rotations|--extra)
-                var_name="$(echo "$1" | sed -e "s/^--//" -e "s/-/_/g")"
+            --period)
                 shift
-                declare "$var_name"="${1:?"$var_name" is missing}"
+                period="${1:?period is missing}"
+                ;;
+            --rotations)
+                shift
+                rotations="${1:?rotations is missing}"
+                ;;
+            --extra)
+                shift
+                extra="${1:?extra is missing}"
                 ;;
             *)
                 echo "Invalid command line flag ${1}" >&2
@@ -278,8 +285,8 @@ EOF
 #   None
 #########################
 remove_logrotate_conf() {
-    local service_name="${1:?service name is missing}"
-    local logrotate_conf_dir="/etc/logrotate.d"
+    service_name="${1:?service name is missing}"
+    logrotate_conf_dir="/etc/logrotate.d"
     rm -f "${logrotate_conf_dir}/${service_name}"
 }
 
@@ -310,79 +317,71 @@ remove_logrotate_conf() {
 #   None
 #########################
 generate_systemd_conf() {
-    local -r service_name="${1:?service name is missing}"
-    local -r systemd_units_dir="/etc/systemd/system"
-    local -r service_file="${systemd_units_dir}/bitnami.${service_name}.service"
+    service_name="${1:?service name is missing}"
+    systemd_units_dir="/etc/systemd/system"
+    service_file="${systemd_units_dir}/bitnami.${service_name}.service"
     # Default values
-    local name="$service_name"
-    local type="forking"
-    local user=""
-    local group=""
-    local environment=""
-    local environment_file=""
-    local exec_start=""
-    local exec_start_pre=""
-    local exec_start_post=""
-    local exec_stop=""
-    local exec_reload=""
-    local restart="always"
-    local pid_file=""
-    local standard_output="journal"
-    local standard_error=""
-    local limits_content=""
-    local success_exit_status=""
-    local custom_service_content=""
-    local working_directory=""
+    name="$service_name"
+    type="forking"
+    user=""
+    group=""
+    environment=""
+    environment_file=""
+    exec_start=""
+    exec_start_pre=""
+    exec_start_post=""
+    exec_stop=""
+    exec_reload=""
+    restart="always"
+    pid_file=""
+    standard_output="journal"
+    standard_error=""
+    limits_content=""
+    success_exit_status=""
+    custom_service_content=""
+    working_directory=""
+
     # Parse CLI flags
     shift
-    while [[ "$#" -gt 0 ]]; do
+    while [ "$#" -gt 0 ]; do
         case "$1" in
-            --name \
-            | --type \
-            | --user \
-            | --group \
-            | --exec-start \
-            | --exec-stop \
-            | --exec-reload \
-            | --restart \
-            | --pid-file \
-            | --standard-output \
-            | --standard-error \
-            | --success-exit-status \
-            | --custom-service-content \
-            | --working-directory \
-            )
-                var_name="$(echo "$1" | sed -e "s/^--//" -e "s/-/_/g")"
+            --name|--type|--user|--group|--exec-start|--exec-stop|--exec-reload|--restart|--pid-file|--standard-output|--standard-error|--success-exit-status|--custom-service-content|--working-directory)
+                var_name=$(echo "$1" | sed -e "s/^--//" -e "s/-/_/g")
                 shift
-                declare "$var_name"="${1:?"${var_name} value is missing"}"
+                eval "$var_name=\"\${1:?${var_name} value is missing}\""
                 ;;
             --limit-*)
-                [[ -n "$limits_content" ]] && limits_content+=$'\n'
-                var_name="${1//--limit-}"
+                var_name=$(echo "$1" | sed -e "s/^--limit-//" -e "s/-/_/g")
                 shift
-                limits_content+="Limit${var_name^^}=${1:?"--limit-${var_name} value is missing"}"
+                limits_content="${limits_content}Limit$(echo "$var_name" | tr '[:lower:]' '[:upper:]')=${1:?--limit-${var_name} value is missing}\n"
                 ;;
             --exec-start-pre)
                 shift
-                [[ -n "$exec_start_pre" ]] && exec_start_pre+=$'\n'
-                exec_start_pre+="ExecStartPre=${1:?"--exec-start-pre value is missing"}"
+                if [ -n "$exec_start_pre" ]; then
+                    exec_start_pre="${exec_start_pre}\n"
+                fi
+                exec_start_pre="${exec_start_pre}ExecStartPre=${1:?--exec-start-pre value is missing}"
                 ;;
             --exec-start-post)
                 shift
-                [[ -n "$exec_start_post" ]] && exec_start_post+=$'\n'
-                exec_start_post+="ExecStartPost=${1:?"--exec-start-post value is missing"}"
+                if [ -n "$exec_start_post" ]; then
+                    exec_start_post="${exec_start_post}\n"
+                fi
+                exec_start_post="${exec_start_post}ExecStartPost=${1:?--exec-start-post value is missing}"
                 ;;
             --environment)
                 shift
-                # It is possible to add multiple environment lines
-                [[ -n "$environment" ]] && environment+=$'\n'
-                environment+="Environment=${1:?"--environment value is missing"}"
+                if [ -n "$environment" ]; then
+                    environment="${environment}\n"
+                fi
+                environment="${environment}Environment=${1:?--environment value is missing}"
                 ;;
             --environment-file)
                 shift
-                # It is possible to add multiple environment-file lines
-                [[ -n "$environment_file" ]] && environment_file+=$'\n'
-                environment_file+="EnvironmentFile=${1:?"--environment-file value is missing"}"
+                if [ -n "$environment_file" ]; then
+                    environment_file="${environment_file}\n"
+                fi
+                environment_file="${environment_file}EnvironmentFile=${1:?--environment-file value is missing}"
                 ;;
             *)
                 echo "Invalid command line flag ${1}" >&2
@@ -391,106 +390,61 @@ generate_systemd_conf() {
         esac
         shift
     done
+
     # Validate inputs
-    local error="no"
-    if [[ -z "$exec_start" ]]; then
+    error="no"
+    if [ -z "$exec_start" ]; then
         error "The --exec-start option is required"
         error="yes"
     fi
-    if [[ "$error" != "no" ]]; then
+    if [ "$error" != "no" ]; then
         return 1
     fi
+
     # Generate the Systemd unit
-    cat > "$service_file" <<EOF
-# Copyright Broadcom, Inc. All Rights Reserved.
-# SPDX-License-Identifier: APACHE-2.0
-
-[Unit]
-Description=Bitnami service for ${name}
-# Starting/stopping the main bitnami service should cause the same effect for this service
-PartOf=bitnami.service
-
-[Service]
-Type=${type}
-EOF
-    if [[ -n "$working_directory" ]]; then
-        cat >> "$service_file" <<< "WorkingDirectory=${working_directory}"
-    fi
-    if [[ -n "$exec_start_pre" ]]; then
-        # This variable may contain multiple ExecStartPre= directives
-        cat >> "$service_file" <<< "$exec_start_pre"
-    fi
-    if [[ -n "$exec_start" ]]; then
-        cat >> "$service_file" <<< "ExecStart=${exec_start}"
-    fi
-    if [[ -n "$exec_start_post" ]]; then
-        # This variable may contain multiple ExecStartPost= directives
-        cat >> "$service_file" <<< "$exec_start_post"
-    fi
-    # Optional stop and reload commands
-    if [[ -n "$exec_stop" ]]; then
-        cat >> "$service_file" <<< "ExecStop=${exec_stop}"
-    fi
-    if [[ -n "$exec_reload" ]]; then
-        cat >> "$service_file" <<< "ExecReload=${exec_reload}"
-    fi
-    # User and group
-    if [[ -n "$user" ]]; then
-        cat >> "$service_file" <<< "User=${user}"
-    fi
-    if [[ -n "$group" ]]; then
-        cat >> "$service_file" <<< "Group=${group}"
-    fi
-    # PID file allows to determine if the main process is running properly (for Restart=always)
-    if [[ -n "$pid_file" ]]; then
-        cat >> "$service_file" <<< "PIDFile=${pid_file}"
-    fi
-    if [[ -n "$restart" ]]; then
-        cat >> "$service_file" <<< "Restart=${restart}"
-    fi
-    # Environment flags
-    if [[ -n "$environment" ]]; then
-        # This variable may contain multiple Environment= directives
-        cat >> "$service_file" <<< "$environment"
-    fi
-    if [[ -n "$environment_file" ]]; then
-        # This variable may contain multiple EnvironmentFile= directives
-        cat >> "$service_file" <<< "$environment_file"
-    fi
-    # Logging
-    if [[ -n "$standard_output" ]]; then
-        cat >> "$service_file" <<< "StandardOutput=${standard_output}"
-    fi
-    if [[ -n "$standard_error" ]]; then
-        cat >> "$service_file" <<< "StandardError=${standard_error}"
-    fi
-    if [[ -n "$custom_service_content" ]]; then
-        # This variable may contain multiple miscellaneous directives
-        cat >> "$service_file" <<< "$custom_service_content"
-    fi
-    if [[ -n "$success_exit_status" ]]; then
-        cat >> "$service_file" <<EOF
-# When the process receives a SIGTERM signal, it exits with code ${success_exit_status}
-SuccessExitStatus=${success_exit_status}
-EOF
-    fi
-    cat >> "$service_file" <<EOF
-# Optimizations
-TimeoutStartSec=2min
-TimeoutStopSec=30s
-IgnoreSIGPIPE=no
-KillMode=mixed
-EOF
-    if [[ -n "$limits_content" ]]; then
-        cat >> "$service_file" <<EOF
-# Limits
-${limits_content}
-EOF
-    fi
-    cat >> "$service_file" <<EOF
-
-[Install]
-# Enabling/disabling the main bitnami service should cause the same effect for this service
-WantedBy=bitnami.service
-EOF
+    mkdir -p "$systemd_units_dir"
+    {
+        echo "# Copyright Broadcom, Inc. All Rights Reserved."
+        echo "# SPDX-License-Identifier: APACHE-2.0"
+        echo
+        echo "[Unit]"
+        echo "Description=Bitnami service for ${name}"
+        echo "# Starting/stopping the main bitnami service should cause the same effect for this service"
+        echo "PartOf=bitnami.service"
+        echo
+        echo "[Service]"
+        echo "Type=${type}"
+        [ -n "$working_directory" ] && echo "WorkingDirectory=${working_directory}"
+        [ -n "$exec_start_pre" ] && printf "%b\n" "$exec_start_pre"
+        [ -n "$exec_start" ] && echo "ExecStart=${exec_start}"
+        [ -n "$exec_start_post" ] && printf "%b\n" "$exec_start_post"
+        [ -n "$exec_stop" ] && echo "ExecStop=${exec_stop}"
+        [ -n "$exec_reload" ] && echo "ExecReload=${exec_reload}"
+        [ -n "$user" ] && echo "User=${user}"
+        [ -n "$group" ] && echo "Group=${group}"
+        [ -n "$pid_file" ] && echo "PIDFile=${pid_file}"
+        [ -n "$restart" ] && echo "Restart=${restart}"
+        [ -n "$environment" ] && printf "%b\n" "$environment"
+        [ -n "$environment_file" ] && printf "%b\n" "$environment_file"
+        [ -n "$standard_output" ] && echo "StandardOutput=${standard_output}"
+        [ -n "$standard_error" ] && echo "StandardError=${standard_error}"
+        [ -n "$custom_service_content" ] && printf "%b\n" "$custom_service_content"
+        [ -n "$success_exit_status" ] && {
+            echo "# When the process receives a SIGTERM signal, it exits with code ${success_exit_status}"
+            echo "SuccessExitStatus=${success_exit_status}"
+        }
+        echo "# Optimizations"
+        echo "TimeoutStartSec=2min"
+        echo "TimeoutStopSec=30s"
+        echo "IgnoreSIGPIPE=no"
+        echo "KillMode=mixed"
+        [ -n "$limits_content" ] && {
+            echo "# Limits"
+            printf "%b\n" "$limits_content"
+        }
+        echo
+        echo "[Install]"
+        echo "# Enabling/disabling the main bitnami service should cause the same effect for this service"
+        echo "WantedBy=bitnami.service"
+    } > "$service_file"
 }

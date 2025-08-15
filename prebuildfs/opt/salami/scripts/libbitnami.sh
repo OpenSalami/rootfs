@@ -25,8 +25,8 @@ BOLD='\033[1m'
 #   None
 #########################
 print_welcome_page() {
-    if [[ -z "${DISABLE_WELCOME_MESSAGE:-}" ]]; then
-        if [[ -n "$SALAMI_APP_NAME" ]]; then
+    if [ -z "${DISABLE_WELCOME_MESSAGE:-}" ]; then
+        if [ -n "$SALAMI_APP_NAME" ]; then
             print_image_welcome_page
         fi
     fi
@@ -49,4 +49,3 @@ print_image_welcome_page() {
     info "Subscribe to project updates by watching ${BOLD}${github_url}${RESET}"
     info ""
 }
-
