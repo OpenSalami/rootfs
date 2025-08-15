@@ -1,0 +1,2 @@
+# rootfs
+rootfs for containers
