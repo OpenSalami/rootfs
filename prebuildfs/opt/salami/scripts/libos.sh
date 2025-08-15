@@ -421,9 +421,18 @@ run_chroot() {
         homedir="${HOME:-/}"
     fi
 
-    if [ "$replace" = true ]; then
-        exec chroot --userspec="$userspec" / sh -c "cd ${cwd}; export HOME=${homedir}; exec \"\$@\"" -- "$@"
+    # Prefer su-exec if available, fallback to chroot (for build/debug environments)
+    if command -v su-exec >/dev/null 2>&1; then
+        if [ "$replace" = true ]; then
+            exec su-exec "$user" "$@"
+        else
+            su-exec "$user" "$@"
+        fi
     else
-        chroot --userspec="$userspec" / sh -c "cd ${cwd}; export HOME=${homedir}; exec \"\$@\"" -- "$@"
+        if [ "$replace" = true ]; then
+            exec chroot --userspec="$userspec" / sh -c "cd ${cwd}; export HOME=${homedir}; exec \"\$@\"" -- "$@"
+        else
+            chroot --userspec="$userspec" / sh -c "cd ${cwd}; export HOME=${homedir}; exec \"\$@\"" -- "$@"
+        fi
     fi
 }
