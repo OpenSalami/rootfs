@@ -1,2 +1,2 @@
 # rootfs
-rootfs for containers
+rootfs for base images
