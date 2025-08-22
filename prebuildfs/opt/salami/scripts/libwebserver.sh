@@ -7,7 +7,7 @@
 # shellcheck disable=SC1090,SC1091
 
 # Load generic libraries
-. /opt/bitnami/scripts/liblog.sh
+. /opt/salami/scripts/liblog.sh
 
 ########################
 # Execute a command (or list of commands) with the web server environment and library loaded
